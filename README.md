@@ -2,8 +2,13 @@
 Import Ben files to Trektellen
 
 
-To install:
+## To install:
 make install
 
-To use:
+## To use:
+
+for a sample:
+make test
+
+for all data:
 make trektellen

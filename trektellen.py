@@ -1,6 +1,7 @@
 import xlrd3 as xlrd
 import math
 import datetime
+import sys
 
 
 class BenFiles:
@@ -172,9 +173,14 @@ class TrekTellenHeaderFile:
             print(header, infos[header])
 
 
-print('BEN FILE')
-# ben_data = BenFiles("test.xls").get_data()
-ben_data = BenFiles("2018.xlsx").get_data()
+n = len(sys.argv)
+filename = "test.xls"
+if n == 1:
+    filename = "test.xls"
+else:
+    filename = sys.argv[1]
+
+ben_data = BenFiles(filename).get_data()
 
 print('TREKTELLEN HEADER FILE')
 for line in ben_data:
