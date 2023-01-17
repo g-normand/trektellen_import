@@ -22,7 +22,11 @@ class BenFiles:
 
     def date(self, cell_value):
         try:
-            return datetime.datetime(*xlrd.xldate_as_tuple(cell_value, datemode=0))
+            # US format need to be changed
+            date_tuple = xlrd.xldate_as_tuple(cell_value, datemode=0)
+            return datetime.datetime(year=date_tuple[0],
+                                     month=date_tuple[2],
+                                     day=date_tuple[1])
         except TypeError:
             for key in ['/', '-']:
                 if key in cell_value:
@@ -191,8 +195,8 @@ class TrekTellenFile:
         infos['precipitation'] = self.precipitation(obs)
         infos['cloudcover'] = self.cloud_cover(obs['CLOUDS'])
         infos['visibility'] = self.visibility(obs['VISIB'])
-        infos['observersactive'] = len(obs['OBS.'].split(' '))
-        infos['observerspresent'] = len(obs['OBS.'].split(' '))
+        infos['observersactive'] = len(obs['OBS.'].split(','))
+        infos['observerspresent'] = len(obs['OBS.'].split(','))
         infos['counttype'] = 'seawatch'
 
         return infos
