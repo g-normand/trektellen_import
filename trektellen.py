@@ -1,4 +1,5 @@
 import xlrd3 as xlrd
+import xlsxwriter
 import math
 import datetime
 import sys
@@ -6,8 +7,8 @@ import sys
 
 class BenFiles:
 
-    def __init__(self, filename):
-        self.filename = filename
+    def __init__(self, input_filename):
+        self.filename = input_filename
 
     @property
     def headers(self):
@@ -23,8 +24,14 @@ class BenFiles:
         try:
             return datetime.datetime(*xlrd.xldate_as_tuple(cell_value, datemode=0))
         except TypeError:
-            print('CELL', cell_value)
-            return cell_value
+            for key in ['/', '-']:
+                if key in cell_value:
+                    splitted = cell_value.split(key)
+                    return datetime.datetime(year=int(splitted[2]),
+                                             month=int(splitted[1]),
+                                             day=int(splitted[0]))
+            assert type(cell_value) == datetime
+            return 'WTF'
 
     def get_data(self):
         book = xlrd.open_workbook(self.filename)
@@ -48,15 +55,39 @@ class BenFiles:
             print(obs)
 
 
-class TrekTellenHeaderFile:
+class TrekTellenFile:
+
+    def __init__(self, out_filename):
+        self.all_dates = {}
+        self.workbook = xlsxwriter.Workbook(out_filename)
+        self.header_sheet = self.workbook.add_worksheet("Header")
+        self.species_sheet = self.workbook.add_worksheet("Species")
+        self.current_header_line = 1
+        self.current_species_line = 1
+        for index, header in enumerate(self.general_headers):
+            self.header_sheet.write(0, index, header)
+        for index, header in enumerate(self.species_headers):
+            self.species_sheet.write(0, index, header)
+
+    def close(self):
+        self.workbook.close()
 
     @property
-    def headers(self):
+    def general_headers(self):
         return [
-            'id', 'siteid', 'date', 'start', 'end', 'observers', 'weather', 'windspeed_bfr', 'wind_ms',
-            'winddirection', 'cloudcover', 'cloudheight', 'precipitation', 'perc_duration', 'visibility',
-            'temperature', 'observersactive', 'observerspresent', 'counttype', 'remarks'
+            'id', 'siteid', 'date', 'start', 'end', 'observers', 'weather', 'windspeed_bfr',
+            'wind_ms', 'winddirection', 'cloudcover', 'cloudheight', 'precipitation',
+            'perc_duration', 'visibility', 'temperature', 'observersactive', 'observerspresent',
+            'counttype', 'remarks'
         ]
+
+    @property
+    def species_headers(self):
+        return ['date', 'timestamp', 'countid', 'siteid', 'speciesid', 'speciesname',
+                'direction1', 'direction2', 'local', 'remarkable', 'remarkablelocal',
+                'age', 'sex', 'plumage', 'remark', 'location', 'migtype', 'counttype',
+                'year', 'yday', 'exactdirection1',
+                'exactdirection2', 'groupid', 'submitted']
 
     def start(self, start):
         date = str(start).split('.')
@@ -143,12 +174,13 @@ class TrekTellenHeaderFile:
             return new_visib * 1000
         return new_visib
 
-    def populate(self, obs):
+    def populate_header(self, obs):
         infos = {}
-        for header in self.headers:
+        for header in self.general_headers:
             infos[header] = ''
+        infos['id'] = 'COUNT_ID'
         infos['siteid'] = 'CHOCO_ID'
-        infos['date'] = obs['DATE']
+        infos['date'] = obs['DATE'].strftime('%d/%m/%Y')
         infos['start'] = self.start(obs['TIME'])
         infos['end'] = self.end(obs['TIME'], obs['DURATION'])
         infos['observers'] = obs['OBS.']
@@ -165,25 +197,56 @@ class TrekTellenHeaderFile:
 
         return infos
 
-    def show_data(self, obs):
+    def add_header(self, obs):
+        if obs['DATE'] in self.all_dates:
+            return
+        infos = self.populate_header(obs)
+        for index, header in enumerate(self.general_headers):
+            self.header_sheet.write(self.current_header_line, index, infos[header])
+        self.all_dates[obs['DATE']] = True
+        self.current_header_line += 1
+
+    def populate_species(self, obs):
+        infos = {}
+        for header in self.species_headers:
+            infos[header] = ''
+
+        infos['date'] = obs['DATE'].strftime('%d/%m/%Y')
+        infos['timestamp'] = self.start(obs['TIME'])
+        infos['countid'] = 'COUNT_ID'
+        infos['siteid'] = 'CHOCO_ID'
+        infos['speciesid'] = obs['Common Name']
+        infos['speciesname'] = obs['Common Name']
+        infos['direction1'] = obs['# S']
+        infos['direction2'] = obs['# N']
+        infos['local'] = obs['RES']
+        infos['remark'] = obs['Spec. Comments']
+        infos['year'] = obs['DATE'].strftime('%Y')
+        infos['yday'] = obs['DATE'].timetuple().tm_yday
+        infos['groupid'] = 'GROUP_ID'
+        infos['submitted'] = 'SUBMITTED_TIME'
+        return infos
+
+    def add_data(self, obs):
         if obs['OBS.'] == '':
             return
-        infos = self.populate(obs)
-        for header in self.headers:
-            print(header, infos[header])
+        self.add_header(obs)
+        infos = self.populate_species(obs)
+        for index, header in enumerate(self.species_headers):
+            self.species_sheet.write(self.current_species_line, index, infos[header])
+        self.current_species_line += 1
 
 
 n = len(sys.argv)
-filename = "test.xls"
-if n == 1:
-    filename = "test.xls"
-else:
-    filename = sys.argv[1]
+assert n == 2
+filename = sys.argv[1]
 
 ben_data = BenFiles(filename).get_data()
 
 print('TREKTELLEN HEADER FILE')
+trek = TrekTellenFile('trektellen_out.xls')
 for line in ben_data:
     print('LINE', line)
-    TrekTellenHeaderFile().show_data(line)
+    trek.add_data(line)
 
+trek.close()
