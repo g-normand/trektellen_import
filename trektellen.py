@@ -9,9 +9,9 @@ SPECIES_ID = dict()
 SPECIES_ID['ACTITIS MACULARIA'] = 186
 SPECIES_ID['ANAS BAHAMENSIS'] = 554
 SPECIES_ID['ANAS DISCORS'] = 65
-SPECIES_ID['ANOUS STOLIDUS'] = '?'
+SPECIES_ID['ANOUS STOLIDUS'] = 708
 SPECIES_ID['ARDEA ALBA'] = 28
-SPECIES_ID['ARDEA COCOI'] = '?'
+SPECIES_ID['ARDEA COCOI'] = 3146
 SPECIES_ID['ARDENNA CREATOPUS'] = 494
 SPECIES_ID['ARDENNA GRISEA'] = 13
 SPECIES_ID['ARENARIA INTERPRES'] = 187
@@ -50,9 +50,9 @@ SPECIES_ID['PELECANUS OCCIDENTALIS'] = 509
 SPECIES_ID['PELECANUS OCCIDENTALIS M'] = 509
 SPECIES_ID['PELECANUS THAGUS'] = 4683
 SPECIES_ID['PHAETHON AETHEREUS'] = 18
-SPECIES_ID['PHALACROC. BOUGAINVILLII'] = '?'
+SPECIES_ID['PHALACROC. BOUGAINVILLII'] = 3149
 SPECIES_ID['PHALACROC. BRASILIANUS'] = 1365
-SPECIES_ID['PHALAROPUS FULICARIUS'] = '?'
+SPECIES_ID['PHALAROPUS FULICARIUS'] = 190
 SPECIES_ID['PHALAROPUS LOBATUS'] = 189
 SPECIES_ID['PHALAROPUS SPEC'] = 1092
 SPECIES_ID['PHALAROPUS TRICOLOR'] = 188
@@ -62,11 +62,11 @@ SPECIES_ID['PTERODROMA PHAEOPYGIA'] = 3128
 SPECIES_ID['PUFFINUS SPEC'] = 229
 SPECIES_ID['PUFFINUS SUBALARIS'] = 3131
 SPECIES_ID['RYNCHOPS NIGER'] = 710
-SPECIES_ID['SRENA SPEC'] = '?'
-SPECIES_ID['STERCORARIUS LONGICAUDUS'] = '?'
-SPECIES_ID['STERCORARIUS PARASITICUS'] = 914
-SPECIES_ID['STERCORARIUS POMARINUS'] = 914
-SPECIES_ID['STERCORARIUS SPEC'] = '?'
+SPECIES_ID['SRENA SPEC'] = 705
+SPECIES_ID['STERCORARIUS LONGICAUDUS'] = 193
+SPECIES_ID['STERCORARIUS PARASITICUS'] = 192
+SPECIES_ID['STERCORARIUS POMARINUS'] = 191
+SPECIES_ID['STERCORARIUS SPEC'] = 455
 SPECIES_ID['STERNA HIRUNDINACEA'] = 3220
 SPECIES_ID['STERNA HIRUNDO'] = 217
 SPECIES_ID['STERNA PARADISAEA'] = 218
@@ -77,15 +77,15 @@ SPECIES_ID['SULA NEBOUXII'] = 1979
 SPECIES_ID['SULA SULA'] = 1980
 SPECIES_ID['SULA VARIEGATA'] = 3150
 SPECIES_ID['SYULA VARIEGATA'] = 3150
-SPECIES_ID['THALASSEUS ELEGANS'] = 4686
-SPECIES_ID['THALASSEUS ELEGANT'] = 4686
+SPECIES_ID['THALASSEUS ELEGANS'] = 696
+SPECIES_ID['THALASSEUS ELEGANT'] = 696
 SPECIES_ID['THALASSEUS MAXIMUS'] = 692
 SPECIES_ID['THALASSEUS SANDVCENSIS'] = 215
 SPECIES_ID['THALASSEUS SANDVICENSIS'] = 215
-SPECIES_ID['THALASSEUS SPEC'] = '?'
+SPECIES_ID['THALASSEUS SPEC'] = 4686
 SPECIES_ID['TRINGA INCANA'] = 670
 SPECIES_ID['TRINGA SEMIPALMATA'] = 671
-SPECIES_ID['WADER SPEC'] = '?'
+SPECIES_ID['WADER SPEC'] = 672
 SPECIES_ID['XEMA SABINI'] = 198
 
 
@@ -209,12 +209,15 @@ class TrekTellenFile:
         """
         Couldcover can be a percentage, but is should be one single value.
         So in the vast of 20>100 is is probably best to use 55.
+
+        Cloudcover should be a value between 0 and 8
+        25% will be 2/8
         """
         if type(cloud) == float:
-            return int(cloud)
+            return int(cloud / 12.5)
         cloud = cloud.split(';')[0]
 
-        return self.split_data(cloud)
+        return int(self.split_data(cloud) / 12.5)
 
     def precipitation(self, obs):
         """
@@ -266,9 +269,9 @@ class TrekTellenFile:
         infos = {}
         for header in self.general_headers:
             infos[header] = ''
-        infos['id'] = 'COUNT_ID'
+        infos['id'] = self.current_header_line
         infos['siteid'] = CHOCOLATERA_ID
-        infos['date'] = obs['DATE'].strftime('%d/%m/%Y')
+        infos['date'] = obs['DATE'].strftime('%Y/%m/%d')
         infos['start'] = self.start(obs['TIME'])
         infos['end'] = self.end(obs['TIME'], obs['DURATION'])
         infos['observers'] = obs['OBS.']
@@ -294,25 +297,37 @@ class TrekTellenFile:
         self.all_dates[obs['DATE']] = True
         self.current_header_line += 1
 
+    def remark_species(self, obs):
+        remark = ''
+        if obs['Genus'] != '':
+            remark += f"Sub-species : {obs['Genus']}"
+
+        if obs['Common Name'] == 'PELECANUS OCCIDENTALIS M':
+            remark += "Sub-species : MURPHYI"
+
+        remark += obs['Spec. Comments']
+
+        return remark
+
     def populate_species(self, obs):
         infos = {}
         for header in self.species_headers:
             infos[header] = ''
 
-        infos['date'] = obs['DATE'].strftime('%d/%m/%Y')
+        infos['date'] = obs['DATE'].strftime('%Y/%m/%d')
         infos['timestamp'] = self.start(obs['TIME'])
-        infos['countid'] = 'COUNT_ID'
+        infos['countid'] = self.current_header_line - 1
         infos['siteid'] = CHOCOLATERA_ID
         infos['speciesid'] = SPECIES_ID[obs['Common Name'].rstrip()]
         infos['speciesname'] = obs['Common Name']
         infos['direction1'] = obs['# S']
         infos['direction2'] = obs['# N']
         infos['local'] = obs['RES']
-        infos['remark'] = obs['Spec. Comments']
+        infos['remark'] = self.remark_species(obs)
         infos['year'] = obs['DATE'].strftime('%Y')
         infos['yday'] = obs['DATE'].timetuple().tm_yday
-        infos['groupid'] = 'GROUP_ID'
-        infos['submitted'] = 'SUBMITTED_TIME'
+        infos['groupid'] = ''
+        infos['submitted'] = ''
         return infos
 
     def add_data(self, obs):
@@ -331,10 +346,9 @@ filename = sys.argv[1]
 
 ben_data = BenFiles(filename).get_data()
 
-print('TREKTELLEN HEADER FILE')
 trek = TrekTellenFile('trektellen_out.xls')
 for line in ben_data:
-    print('LINE', line)
     trek.add_data(line)
 
 trek.close()
+print('TREKTELLEN FILE OK')
