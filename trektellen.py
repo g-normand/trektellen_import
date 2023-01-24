@@ -5,6 +5,8 @@ import datetime
 import sys
 
 CHOCOLATERA_ID = 2788
+BARROW_ID = 3583
+
 SPECIES_ID = dict()
 SPECIES_ID['ACTITIS MACULARIA'] = 186
 SPECIES_ID['ANAS BAHAMENSIS'] = 554
@@ -89,6 +91,55 @@ SPECIES_ID['WADER SPEC'] = 672
 SPECIES_ID['XEMA SABINI'] = 198
 
 
+SPECIES_ID['ARCT TERN'] = 218
+SPECIES_ID['BAIRD SPIP'] = 157
+SPECIES_ID['BAIRDS SP'] = 157
+SPECIES_ID['BARN SW'] = 271
+SPECIES_ID['BLACK GM'] = 227
+SPECIES_ID['COM EID'] = 73
+SPECIES_ID['COM SCO'] = 78
+SPECIES_ID['DUCK SP'] = 984
+SPECIES_ID['EID SPEC'] = 564
+SPECIES_ID['EID SPECIES'] = 564
+SPECIES_ID['GLO GULL'] = 208
+SPECIES_ID['GRW TEAL'] = 550
+SPECIES_ID['GRE SCOU'] = 72
+SPECIES_ID['GRW GOOSE'] = 43
+SPECIES_ID['HER GULL'] = 206
+SPECIES_ID['JAE SPEC'] = 455
+SPECIES_ID['JAEGER SPEC'] = 455
+SPECIES_ID['KING EID'] = 74
+SPECIES_ID['KITTIWAKE'] = 211
+SPECIES_ID['MURR SP'] = 712
+SPECIES_ID['LOON SP'] = 457
+SPECIES_ID['LT DUCK'] = 77
+SPECIES_ID['LT JAE'] = 193
+SPECIES_ID['LT JAEG'] = 193
+SPECIES_ID['LARGE GULL'] = 990
+SPECIES_ID['PAC LOON'] = 1315
+SPECIES_ID['PAR JAEG'] = 192
+SPECIES_ID['PAR JAE'] = 192
+SPECIES_ID['PEL CORM'] = 1982
+SPECIES_ID['PINTAIL'] = 63
+SPECIES_ID['PINT'] = 63
+SPECIES_ID['POM JAE'] = 191
+SPECIES_ID['RB MERG'] = 83
+SPECIES_ID['BRANT'] = 50
+SPECIES_ID['RED LOON'] = 1
+SPECIES_ID['RED PHAL'] = 190
+SPECIES_ID['REDPOLL SPE'] = 410
+SPECIES_ID['SAB GULL'] = 198
+SPECIES_ID['SNOWY O'] = 241
+SPECIES_ID['SPECT EID'] = 563
+SPECIES_ID['SPEC EID'] = 563
+SPECIES_ID['YELL LOON'] = 4
+SPECIES_ID['THICKB M'] = 225
+SPECIES_ID['TUFTED PU'] = 2033
+SPECIES_ID['TUNDRA SWAN'] = 539
+SPECIES_ID['HORNED PU'] = "x"
+SPECIES_ID['AMGOPL'] = "x"
+
+
 class BenFiles:
 
     def __init__(self, input_filename):
@@ -115,9 +166,9 @@ class BenFiles:
             for key in ['/', '-']:
                 if key in cell_value:
                     splitted = cell_value.split(key)
-                    return datetime.datetime(year=int(splitted[2]),
+                    return datetime.datetime(year=int(splitted[0]),
                                              month=int(splitted[1]),
-                                             day=int(splitted[0]))
+                                             day=int(splitted[2]))
             assert type(cell_value) == datetime
             return 'WTF'
 
@@ -145,8 +196,9 @@ class BenFiles:
 
 class TrekTellenFile:
 
-    def __init__(self, out_filename):
+    def __init__(self, out_filename, year):
         self.all_dates = {}
+        self.year = year
         self.workbook = xlsxwriter.Workbook(out_filename)
         self.header_sheet = self.workbook.add_worksheet("Header")
         self.species_sheet = self.workbook.add_worksheet("Species")
@@ -177,14 +229,20 @@ class TrekTellenFile:
                 'year', 'yday', 'exactdirection1',
                 'exactdirection2', 'groupid', 'submitted']
 
-    def start(self, start):
+    def get_hour_and_minutes(self, start):
         date = str(start).split('.')
-        hours, minutes = int(date[0]), int(date[1])
+        if len(date[1]) == 2:
+            minutes = int(date[1])
+        else:
+            minutes = int(date[1]) * 10
+        return int(date[0]), minutes
+
+    def start(self, start):
+        hours, minutes = self.get_hour_and_minutes(start)
         return f'{hours:02d}:{minutes:02d}'
 
     def end(self, start, duration):
-        date = str(start).split('.')
-        hours, minutes = int(date[0]), int(date[1])
+        hours, minutes = self.get_hour_and_minutes(start)
         total_minutes = minutes + duration
         hours = math.floor((hours * 60 + total_minutes) / 60)
         minutes = int(total_minutes % 60)
@@ -265,12 +323,15 @@ class TrekTellenFile:
             return new_visib * 1000
         return new_visib
 
+    def count_id(self):
+        return self.year * 1000 + self.current_header_line
+
     def populate_header(self, obs):
         infos = {}
         for header in self.general_headers:
             infos[header] = ''
-        infos['id'] = self.current_header_line
-        infos['siteid'] = CHOCOLATERA_ID
+        infos['id'] = self.count_id()
+        infos['siteid'] = BARROW_ID
         infos['date'] = obs['DATE'].strftime('%Y/%m/%d')
         infos['start'] = self.start(obs['TIME'])
         infos['end'] = self.end(obs['TIME'], obs['DURATION'])
@@ -289,12 +350,13 @@ class TrekTellenFile:
         return infos
 
     def add_header(self, obs):
-        if obs['DATE'] in self.all_dates:
+        key = f"{obs['DATE']}_{self.start(obs['TIME'])}"
+        if key in self.all_dates:
             return
         infos = self.populate_header(obs)
         for index, header in enumerate(self.general_headers):
             self.header_sheet.write(self.current_header_line, index, infos[header])
-        self.all_dates[obs['DATE']] = True
+        self.all_dates[key] = True
         self.current_header_line += 1
 
     def remark_species(self, obs):
@@ -316,8 +378,8 @@ class TrekTellenFile:
 
         infos['date'] = obs['DATE'].strftime('%Y/%m/%d')
         infos['timestamp'] = self.start(obs['TIME'])
-        infos['countid'] = self.current_header_line - 1
-        infos['siteid'] = CHOCOLATERA_ID
+        infos['countid'] = self.count_id() - 1
+        infos['siteid'] = BARROW_ID
         infos['speciesid'] = SPECIES_ID[obs['Common Name'].rstrip()]
         infos['speciesname'] = obs['Common Name']
         infos['direction1'] = obs['# S']
@@ -346,7 +408,7 @@ filename = sys.argv[1]
 
 ben_data = BenFiles(filename).get_data()
 
-trek = TrekTellenFile('trektellen_out.xls')
+trek = TrekTellenFile('trektellen_out.xls', 2007)
 for line in ben_data:
     trek.add_data(line)
 

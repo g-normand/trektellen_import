@@ -14,7 +14,7 @@ install:
 	virtualenv -p /usr/bin/python3.9 $(ENV_PATH) && cd $(APP_PATH) && pip3 install -r $(CURDIR)/requirements.txt;
 
 test: virtualenv
-	python3 trektellen.py ben_test_file.xls
+	python3 trektellen.py ben_test_file_alaska.xls
 
 trektellen: virtualenv
-	python3 trektellen.py ben_2018.xlsx
+	python3 trektellen.py ben_2007.xlsx
